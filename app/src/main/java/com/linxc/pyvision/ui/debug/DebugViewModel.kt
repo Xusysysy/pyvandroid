@@ -291,64 +291,23 @@ class DebugViewModel(app: Application) : AndroidViewModel(app) {
 
     // ───────────── 录制 ─────────────
 
-    private var recorder: android.media.MediaRecorder? = null
-    private var recordingFile: File? = null
-
     fun toggleRecording() {
+        val cam = cameraController ?: return
         if (_state.value.recording) {
-            stopRecording()
+            cam.stopRecording()
+            _state.value = _state.value.copy(recording = false, status = "录制已停止")
         } else {
-            startRecording()
-        }
-    }
-
-    private fun startRecording() {
-        val app = getApplication<Application>()
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val dir = File(app.getExternalFilesDir(null), "recordings")
-        if (!dir.exists()) dir.mkdirs()
-        val file = File(dir, "rec_$timestamp.avi")
-        try {
-            val recorder = android.media.MediaRecorder()
-            recorder.apply {
-                setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
-                setVideoSource(android.media.MediaRecorder.VideoSource.SURFACE)
-                setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
-                setVideoEncoder(android.media.MediaRecorder.VideoEncoder.H264)
-                setVideoFrameRate(20)
-                setVideoEncodingBitRate(4_000_000)
-                setOutputFile(file.absolutePath)
+            cam.onRecordingEvent = { recording, msg ->
+                _state.value = _state.value.copy(recording = recording)
+                if (msg != null) _state.value = _state.value.copy(status = msg)
             }
-            recorder.prepare()
-            recorder.start()
-            this.recorder = recorder
-            recordingFile = file
-            _state.value = _state.value.copy(recording = true, status = "录制中: ${file.name}")
-        } catch (e: Exception) {
-            _state.value = _state.value.copy(status = "录制启动失败: ${e.message}")
+            cam.startRecording()
+            _state.value = _state.value.copy(status = "录制中...")
         }
-    }
-
-    private fun stopRecording() {
-        try {
-            recorder?.stop()
-        } catch (e: Exception) {
-            // 时长过短会抛异常
-        }
-        recorder?.release()
-        recorder = null
-        recordingFile?.let { f ->
-            if (f.exists()) {
-                MediaScannerConnection.scanFile(getApplication(), arrayOf(f.absolutePath), null, null)
-                _state.value = _state.value.copy(status = "录制已保存: ${f.name}")
-            }
-        }
-        _state.value = _state.value.copy(recording = false)
     }
 
     override fun onCleared() {
-        stopRecording()
+        if (_state.value.recording) cameraController?.stopRecording()
         cameraController?.release()
         modelLoader?.close()
         super.onCleared()

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-> GitHub: https://github.com/Xusysysy/pyvision.git
+> GitHub: https://github.com/Xusysysy/pyvandroid.git
 > Gitee: https://gitee.com/lin-xiaochuan/pyvandroid.git
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 

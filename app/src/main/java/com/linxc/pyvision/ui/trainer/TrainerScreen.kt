@@ -82,7 +82,7 @@ fun TrainerScreen(onBack: () -> Unit, vm: TrainerViewModel = viewModel()) {
 
     DisposableEffect(Unit) {
         vm.init(camera)
-        onDispose { }
+        onDispose { camera.release() }
     }
 
     Column(

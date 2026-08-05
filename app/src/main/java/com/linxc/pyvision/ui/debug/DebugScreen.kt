@@ -103,7 +103,7 @@ fun DebugScreen(onBack: () -> Unit, vm: DebugViewModel = viewModel()) {
 
     DisposableEffect(Unit) {
         vm.init(camera)
-        onDispose { }
+        onDispose { camera.release() }
     }
 
     Row(
