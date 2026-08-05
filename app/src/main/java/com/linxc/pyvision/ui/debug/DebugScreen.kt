@@ -78,7 +78,12 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DebugScreen(onBack: () -> Unit, granted: Boolean, vm: DebugViewModel = viewModel()) {
+fun DebugScreen(
+    onBack: () -> Unit,
+    granted: Boolean,
+    onRequestPermissions: () -> Unit,
+    vm: DebugViewModel = viewModel(),
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by vm.state.collectAsState()
@@ -126,12 +131,14 @@ fun DebugScreen(onBack: () -> Unit, granted: Boolean, vm: DebugViewModel = viewM
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "请在系统设置中授予权限后返回",
+                    "请在弹窗中允许权限；若被拒绝可在系统设置中授予后返回",
                     color = TextSecondary,
                     fontSize = 14.sp,
                 )
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = onBack) { Text("返回") }
+                Button(onClick = onRequestPermissions) { Text("重新授权") }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onBack) { Text("返回") }
             }
         }
         return

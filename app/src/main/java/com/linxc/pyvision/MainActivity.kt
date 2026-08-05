@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
 
     private val granted = mutableStateOf(false)
 
-    /** 首次进入同时申请：摄像头 + 录音 + 文件访问权限 */
+    /** 首次进入同时申请：摄像头 + 文件访问权限（录像为无声，无需麦克风） */
     private val permissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -34,10 +34,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requiredPermissions(): List<String> {
-        val list = mutableListOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO,
-        )
+        val list = mutableListOf(Manifest.permission.CAMERA)
         if (Build.VERSION.SDK_INT >= 33) {
             list += Manifest.permission.READ_MEDIA_IMAGES
         } else {
@@ -51,6 +48,11 @@ class MainActivity : ComponentActivity() {
         requiredPermissions().all { p ->
             ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
         }
+
+    /** 重新发起权限申请（权限被拒后由权限提示界面调用） */
+    private fun requestPermissions() {
+        permissionsLauncher.launch(requiredPermissions().toTypedArray())
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,12 +68,12 @@ class MainActivity : ComponentActivity() {
 
         granted.value = allPermissionsGranted()
         if (!granted.value) {
-            permissionsLauncher.launch(requiredPermissions().toTypedArray())
+            requestPermissions()
         }
 
         setContent {
             PyvisionTheme {
-                PyvisionApp(granted = granted.value)
+                PyvisionApp(granted = granted.value, onRequestPermissions = ::requestPermissions)
             }
         }
     }
@@ -90,15 +92,23 @@ class MainActivity : ComponentActivity() {
 
 /** 简单导航：Home → Debug / Trainer */
 @Composable
-fun PyvisionApp(granted: Boolean) {
+fun PyvisionApp(granted: Boolean, onRequestPermissions: () -> Unit) {
     var screen by remember { mutableStateOf(Screen.Home) }
     when (screen) {
         Screen.Home -> HomeScreen(
             onOpenDebug = { screen = Screen.Debug },
             onOpenTrainer = { screen = Screen.Trainer },
         )
-        Screen.Debug -> DebugScreen(onBack = { screen = Screen.Home }, granted = granted)
-        Screen.Trainer -> TrainerScreen(onBack = { screen = Screen.Home }, granted = granted)
+        Screen.Debug -> DebugScreen(
+            onBack = { screen = Screen.Home },
+            granted = granted,
+            onRequestPermissions = onRequestPermissions,
+        )
+        Screen.Trainer -> TrainerScreen(
+            onBack = { screen = Screen.Home },
+            granted = granted,
+            onRequestPermissions = onRequestPermissions,
+        )
     }
 }
 

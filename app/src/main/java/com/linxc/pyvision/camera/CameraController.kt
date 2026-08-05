@@ -194,7 +194,6 @@ class CameraController(
         }
 
         val recording = vc.output.prepareRecording(context, outputOptions)
-            .withAudioEnabled()
             .start(ContextCompat.getMainExecutor(context)) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> onRecordingEvent?.invoke(true, null)
