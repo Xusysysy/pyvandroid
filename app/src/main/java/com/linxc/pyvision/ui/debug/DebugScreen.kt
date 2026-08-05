@@ -90,14 +90,18 @@ fun DebugScreen(
 
     val camera = remember { CameraController(context, lifecycleOwner) }
 
-    // 文件选择器：选择模型文件（.onnx/.tflite/.mlp）
+    // 文件选择器：通过系统文件管理器选择模型文件（.onnx/.tflite/.mlp）
     val modelPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            val ext = context.contentResolver.getType(uri) ?: "onnx"
-            val name = "model_${System.currentTimeMillis()}.$ext"
-            val file = File(context.filesDir, name)
+            // 从真实文件名取扩展名（getType 返回 MIME 如 application/octet-stream，不能当扩展名）
+            val displayName = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, uri)?.name
+                ?: uri.lastPathSegment?.substringAfterLast('/')
+                ?: "model_${System.currentTimeMillis()}.bin"
+            val base = displayName.substringBeforeLast('.', "model_${System.currentTimeMillis()}")
+            val ext = displayName.substringAfterLast('.', "").lowercase().ifEmpty { "bin" }
+            val file = File(context.filesDir, "$base.$ext")
             runCatching {
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { output -> input.copyTo(output) }
@@ -164,7 +168,7 @@ fun DebugScreen(
             state = state,
             vm = vm,
             onBack = onBack,
-            onPickModel = { modelPicker.launch(arrayOf("application/octet-stream", "*/*")) },
+            onPickModel = { modelPicker.launch(arrayOf("*/*")) },
             modifier = Modifier
                 .width(320.dp)
                 .fillMaxHeight()
