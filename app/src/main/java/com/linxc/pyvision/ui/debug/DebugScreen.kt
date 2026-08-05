@@ -63,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -77,7 +78,7 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DebugScreen(onBack: () -> Unit, vm: DebugViewModel = viewModel()) {
+fun DebugScreen(onBack: () -> Unit, granted: Boolean, vm: DebugViewModel = viewModel()) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by vm.state.collectAsState()
@@ -102,8 +103,38 @@ fun DebugScreen(onBack: () -> Unit, vm: DebugViewModel = viewModel()) {
     }
 
     DisposableEffect(Unit) {
-        vm.init(camera)
         onDispose { camera.release() }
+    }
+    LaunchedEffect(granted) {
+        if (granted) vm.init(camera)
+    }
+
+    if (!granted) {
+        // 权限未授予：全屏提示，不启动相机
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "需要摄像头与文件访问权限",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "请在系统设置中授予权限后返回",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onBack) { Text("返回") }
+            }
+        }
+        return
     }
 
     Row(
@@ -296,25 +327,31 @@ private fun ControlPanel(
 
         // ─── 摄像头切换 ───
         SectionTitle("摄像头")
-        val cameras = remember { mutableStateOf(listOf<Pair<String, Int>>()) }
-        LaunchedEffect(state.cameraName) {
-            // 摄像头列表由 CameraController 提供
+        var camList by remember { mutableStateOf(listOf<Pair<String, Int>>()) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                val cams = vm.availableCameras()
+                if (cams.isNotEmpty()) camList = cams
+                kotlinx.coroutines.delay(500)
+            }
         }
+        val cameras = if (camList.isNotEmpty()) camList else listOf("后置" to 1, "前置" to 0)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { vm.switchCamera(androidx.camera.core.CameraSelector.LENS_FACING_BACK, "后置") },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = if (state.cameraName == "后置") Primary else SurfaceHigh,
-                ),
-                modifier = Modifier.weight(1f),
-            ) { Text("后置") }
-            Button(
-                onClick = { vm.switchCamera(androidx.camera.core.CameraSelector.LENS_FACING_FRONT, "前置") },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = if (state.cameraName == "前置") Primary else SurfaceHigh,
-                ),
-                modifier = Modifier.weight(1f),
-            ) { Text("前置") }
+            cameras.forEach { (name, lens) ->
+                Button(
+                    onClick = { vm.switchCamera(lens, name) },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (state.cameraName == name) Primary else SurfaceHigh,
+                    ),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        name,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
 
         // ─── 分辨率 ───
@@ -368,10 +405,22 @@ private fun ControlPanel(
                     .padding(top = 8.dp),
             ) {
                 Column(Modifier.padding(10.dp)) {
-                    Text("模型: ${File(state.modelPath).name.ifEmpty { "未选择" }}", color = TextPrimary, fontSize = 12.sp)
+                    Text(
+                        "模型: ${File(state.modelPath).name.ifEmpty { "未选择" }}",
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
                     if (state.modelLoading) Text("加载中...", color = TextSecondary, fontSize = 12.sp)
                     state.modelError?.let {
-                        Text("错误: $it", color = AccentRed, fontSize = 12.sp)
+                        Text(
+                            "错误: $it",
+                            color = AccentRed,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
                     }
                     OutlinedButton(onClick = onPickModel, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
                         Icon(Icons.Default.Info, null, Modifier.width(16.dp))
@@ -449,6 +498,8 @@ private fun ControlPanel(
             "帧: ${state.frameSize} | 已拍: ${state.snapshotCount}",
             color = TextSecondary,
             fontSize = 12.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
     }
 }
@@ -459,11 +510,19 @@ private fun SectionTitle(title: String) {
         title,
         color = com.linxc.pyvision.ui.theme.AccentBlue,
         fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
     )
 }
 
 @Composable
 private fun StatusText(text: String) {
-    Text(text, color = TextSecondary, fontSize = 12.sp, maxLines = 2)
+    Text(
+        text,
+        color = TextSecondary,
+        fontSize = 12.sp,
+        maxLines = 1,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+    )
 }

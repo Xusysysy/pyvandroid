@@ -61,6 +61,12 @@ class CameraController(
         val list = mutableListOf<Pair<String, Int>>()
         if (provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) list.add("后置" to CameraSelector.LENS_FACING_BACK)
         if (provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) list.add("前置" to CameraSelector.LENS_FACING_FRONT)
+        // USB/UVC 摄像头（Android 12+ 系统级 external camera 支持）
+        provider.availableCameraInfos.forEach { info ->
+            if (info.lensFacing == CameraSelector.LENS_FACING_EXTERNAL) {
+                list.add("USB 摄像头" to CameraSelector.LENS_FACING_EXTERNAL)
+            }
+        }
         return list
     }
 
@@ -99,15 +105,18 @@ class CameraController(
         return builder.build()
     }
 
+    private fun buildSelector(): CameraSelector = when (currentLens) {
+        CameraSelector.LENS_FACING_FRONT -> CameraSelector.DEFAULT_FRONT_CAMERA
+        CameraSelector.LENS_FACING_EXTERNAL ->
+            CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_EXTERNAL).build()
+        else -> CameraSelector.DEFAULT_BACK_CAMERA
+    }
+
     private fun bind() {
         val provider = cameraProvider ?: return
         provider.unbindAll()
 
-        val selector = if (currentLens == CameraSelector.LENS_FACING_FRONT) {
-            CameraSelector.DEFAULT_FRONT_CAMERA
-        } else {
-            CameraSelector.DEFAULT_BACK_CAMERA
-        }
+        val selector = buildSelector()
 
         val analysisBuilder = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)

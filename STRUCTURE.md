@@ -9,9 +9,9 @@ pyvandroid/
 │   └── src/main/
 │       ├── AndroidManifest.xml           # 相机/录音权限，横屏入口
 │       ├── java/com/linxc/pyvision/
-│       │   ├── MainActivity.kt           # 入口 + Home/Debug/Trainer 导航
+│       │   ├── MainActivity.kt           # 入口 + 全屏 + 首次权限申请 + Home/Debug/Trainer 导航
 │       │   ├── camera/
-│       │   │   └── CameraController.kt   # CameraX 封装（前后切换/分辨率/帧回调）
+│       │   │   └── CameraController.kt   # CameraX 封装（前后/USB 外部摄像头切换、分辨率、帧回调）
 │       │   ├── data/
 │       │   │   ├── SettingsRepository.kt # DataStore 设置持久化（对应 settings.json）
 │       │   │   └── DatasetRepository.kt  # 数据集目录管理（raw/train/val + zip 导出）
@@ -41,7 +41,7 @@ pyvandroid/
 
 | 模块 | 对应桌面版 | 职责 |
 |------|-----------|------|
-| `CameraController` | `CameraManager` | CameraX 帧流，前后摄切换，分辨率设置 |
+| `CameraController` | `CameraManager` | CameraX 帧流，前后/USB 外部摄切换，分辨率设置 |
 | `FramePipeline` | `FrameProcessor` 系列 | 直通/灰度/Canny 处理，镜像与偏移平移 |
 | `Canny` | `cv2.Canny` | 纯 Kotlin 实现的高斯+Sobel+NMS+双阈值 |
 | `OnnxEngine` | `CNNProcessor._load_onnx` | ONNX 检测（2D Nx6 / 3D xywh）+ 分类 |
@@ -56,9 +56,12 @@ pyvandroid/
 |-----------|-------------|
 | 偏移校准滑块 + 十字线 | Slider + Canvas 十字准星 |
 | CNN 每 3 帧推理 + EMA 平滑 | `inferEvery=3` + `smoothProbs` 0.5/0.5 |
-| 快照/录制 | MediaStore 相册 + MediaRecorder |
+| 快照/录制 | MediaStore 相册 + CameraX VideoCapture |
 | 设置自动恢复 | DataStore Flow + `settings.first()` |
 | 数据集划分（seed 42） | Random(42) 划分 |
+| 多摄像头/USB 摄像头 | 前后摄 + `LENS_FACING_EXTERNAL`（Android 12+ 系统级 UVC 支持） |
+| 全屏显示 | `WindowInsetsControllerCompat` 隐藏系统栏 |
+| 运行时权限 | MainActivity 首次进入申请 CAMERA + RECORD_AUDIO + 文件访问权限 |
 
 ## 依赖关系
 

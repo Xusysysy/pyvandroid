@@ -30,6 +30,7 @@ data class TrainerUiState(
     val imgsz: Int = 28,
     val batch: Int = 16,
     val status: String = "就绪",
+    val cameraName: String = "后置",
     val training: Boolean = false,
     val lastSaved: String? = null,
     val log: String = "",
@@ -69,6 +70,14 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun getCurrentFrame(): Bitmap? = currentFrame
+
+    fun availableCameras(): List<Pair<String, Int>> =
+        cameraController?.availableCameras() ?: emptyList()
+
+    fun switchCamera(lens: Int, name: String) {
+        cameraController?.switchCamera(lens)
+        _state.value = _state.value.copy(status = "已切换到 $name", cameraName = name)
+    }
 
     // ───────────── 采集 ─────────────
 

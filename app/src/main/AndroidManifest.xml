@@ -8,6 +8,12 @@
     <uses-feature
         android:name="android.hardware.camera.front"
         android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.external"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

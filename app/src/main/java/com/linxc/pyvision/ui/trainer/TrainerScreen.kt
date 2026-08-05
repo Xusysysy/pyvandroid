@@ -72,7 +72,7 @@ import com.linxc.pyvision.ui.theme.TextPrimary
 import com.linxc.pyvision.ui.theme.TextSecondary
 
 @Composable
-fun TrainerScreen(onBack: () -> Unit, vm: TrainerViewModel = viewModel()) {
+fun TrainerScreen(onBack: () -> Unit, granted: Boolean, vm: TrainerViewModel = viewModel()) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by vm.state.collectAsState()
@@ -81,8 +81,38 @@ fun TrainerScreen(onBack: () -> Unit, vm: TrainerViewModel = viewModel()) {
     val camera = remember { CameraController(context, lifecycleOwner) }
 
     DisposableEffect(Unit) {
-        vm.init(camera)
         onDispose { camera.release() }
+    }
+    LaunchedEffect(granted) {
+        if (granted) vm.init(camera)
+    }
+
+    if (!granted) {
+        // 权限未授予：全屏提示，不启动相机
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "需要摄像头与文件访问权限",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "请在系统设置中授予权限后返回",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onBack) { Text("返回") }
+            }
+        }
+        return
     }
 
     Column(
@@ -102,7 +132,14 @@ fun TrainerScreen(onBack: () -> Unit, vm: TrainerViewModel = viewModel()) {
             }
             Text("智能眼镜训练工作台", style = MaterialTheme.typography.titleLarge, color = Primary)
             Spacer(Modifier.weight(1f))
-            Text(state.status, color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+            Text(
+                state.status,
+                color = TextSecondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(end = 8.dp),
+            )
         }
 
         TabRow(
@@ -138,7 +175,6 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
             kotlinx.coroutines.delay(33)
         }
     }
-
     Row(modifier = Modifier.fillMaxSize()) {
         // 左：预览
         Box(
@@ -198,6 +234,38 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
+            // 摄像头切换（含 USB 摄像头）
+            Text("摄像头", fontWeight = FontWeight.Bold, color = AccentBlue)
+            var camList by remember { mutableStateOf(listOf<Pair<String, Int>>()) }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    val cams = vm.availableCameras()
+                    if (cams.isNotEmpty()) camList = cams
+                    kotlinx.coroutines.delay(500)
+                }
+            }
+            val cams = if (camList.isNotEmpty()) camList else listOf("后置" to 1, "前置" to 0)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                cams.forEach { (name, lens) ->
+                    Button(
+                        onClick = { vm.switchCamera(lens, name) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (state.cameraName == name) Primary else Surface,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            name,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+            Divider(Modifier.padding(vertical = 8.dp))
+
             Text("选择类别", fontWeight = FontWeight.Bold, color = AccentBlue)
             Spacer(Modifier.height(8.dp))
             val colors = listOf(Primary, AccentOrange, AccentPurple)
@@ -213,7 +281,12 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
                         .fillMaxWidth()
                         .padding(vertical = 3.dp),
                 ) {
-                    Text("${label} (${i + 1})   ${state.rawCounts[i]} 张", fontWeight = FontWeight.Bold)
+                    Text(
+                        "${label} (${i + 1})   ${state.rawCounts[i]} 张",
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
                 }
             }
 
@@ -262,7 +335,14 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
                 modifier = Modifier.padding(top = 4.dp),
             )
             state.lastSaved?.let {
-                Text("最近保存: $it", color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                Text(
+                    "最近保存: $it",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
             Text(
                 "\n提示: 智能眼镜 = 带摄像头/电池\n普通眼镜 = 仅镜框镜片\n空桌面 = 无眼镜背景",
@@ -291,6 +371,8 @@ private fun PrepareTab(vm: TrainerViewModel, state: TrainerUiState) {
             "数据目录: ${DatasetRepository.root(LocalContext.current).absolutePath}",
             color = TextSecondary,
             fontSize = 12.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 4.dp),
         )
         Spacer(Modifier.height(16.dp))

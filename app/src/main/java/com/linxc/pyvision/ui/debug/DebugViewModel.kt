@@ -181,6 +181,9 @@ class DebugViewModel(app: Application) : AndroidViewModel(app) {
 
     fun getProcessedFrame(): Bitmap? = currentProcessed
 
+    fun availableCameras(): List<Pair<String, Int>> =
+        cameraController?.availableCameras() ?: emptyList()
+
     // ───────────── 设置变更 ─────────────
 
     fun setProcessor(name: String) {
