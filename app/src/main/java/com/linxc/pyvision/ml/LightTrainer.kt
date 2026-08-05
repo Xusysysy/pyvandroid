@@ -116,8 +116,8 @@ class LightTrainer {
                     val dLogits = FloatArray(p.output) { probs[it] - (if (it == target) 1f else 0f) }
                     for (j in 0 until p.hidden) {
                         for (k in 0 until p.output) gW2[j][k] += h1[j] * dLogits[k]
-                        gB2[j] += dLogits[j]
                     }
+                    for (k in 0 until p.output) gB2[k] += dLogits[k]
                     val dH = FloatArray(p.hidden)
                     for (j in 0 until p.hidden) {
                         var acc = 0f
