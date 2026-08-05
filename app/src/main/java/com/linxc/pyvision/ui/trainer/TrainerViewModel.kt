@@ -47,14 +47,28 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(TrainerUiState())
     val state: StateFlow<TrainerUiState> = _state.asStateFlow()
 
+    private val _preview = MutableStateFlow<Bitmap?>(null)
+    /** 预览帧流：降采样后推送（仅新帧变化触发重绘） */
+    val preview: StateFlow<Bitmap?> = _preview.asStateFlow()
+
     private var cameraController: CameraController? = null
-    private var frameJob: Job? = null
+    private var previewJob: Job? = null
     private var trainJob: Job? = null
-    private var currentFrame: Bitmap? = null
+    private val latestRaw = java.util.concurrent.atomic.AtomicReference<Bitmap?>(null)
+    /** 最近一帧原始帧（采集保存用，独立于预览消费） */
+    @Volatile
+    private var recentRaw: Bitmap? = null
+    private val processLock = Any()
 
     fun init(camera: CameraController) {
         cameraController = camera
-        camera.onFrame = { frame -> currentFrame = frame }
+        // 相机线程只存最新帧立即返回；后台协程降采样发布预览
+        camera.onFrame = { frame ->
+            synchronized(processLock) {
+                recentRaw = frame
+                latestRaw.set(frame)
+            }
+        }
         viewModelScope.launch {
             val s = settingsRepo.settings.first()
             _state.value = _state.value.copy(
@@ -67,9 +81,28 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             refreshStats()
         }
         camera.start()
+        previewJob = viewModelScope.launch(Dispatchers.Default) { previewLoop() }
     }
 
-    fun getCurrentFrame(): Bitmap? = currentFrame
+    /** 预览降采样循环：始终取最新帧，只做缩放（轻量），不阻塞相机线程 */
+    private suspend fun previewLoop() {
+        while (true) {
+            val raw = synchronized(processLock) {
+                val f = latestRaw.get()
+                latestRaw.set(null)
+                f
+            } ?: run { kotlinx.coroutines.delay(1); continue }
+            val state = _state.value
+            var disp = raw
+            if (state.offsetX != 0 || state.offsetY != 0) {
+                disp = com.linxc.pyvision.processing.FramePipeline.applyOffset(raw, state.offsetX, state.offsetY)
+            }
+            _preview.value = com.linxc.pyvision.processing.FramePipeline.scaleDown(disp, 960)
+        }
+    }
+
+    /** 返回最近一帧原始帧（采集保存用，最高分辨率） */
+    fun getCurrentFrame(): Bitmap? = recentRaw
 
     fun availableCameras(): List<Pair<String, Int>> =
         cameraController?.availableCameras() ?: emptyList()
@@ -86,7 +119,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun saveFrame() {
-        val frame = currentFrame ?: run {
+        val frame = getCurrentFrame() ?: run {
             _state.value = _state.value.copy(status = "没有可保存的帧")
             return
         }

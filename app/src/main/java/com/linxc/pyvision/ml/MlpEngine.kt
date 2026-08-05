@@ -22,6 +22,8 @@ class MlpEngine private constructor(private val mlp: LightTrainer.Mlp) : ModelEn
         return emptyList()
     }
 
+    override fun infer(bitmap: Bitmap): InferenceResult = InferenceResult(classProbs = classify(bitmap))
+
     override fun classify(bitmap: Bitmap): List<Pair<String, Float>> {
         try {
             val resized = Bitmap.createScaledBitmap(bitmap, 28, 28, true)

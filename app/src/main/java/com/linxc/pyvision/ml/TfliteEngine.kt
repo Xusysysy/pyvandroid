@@ -26,6 +26,8 @@ class TfliteEngine private constructor(
         return emptyList()
     }
 
+    override fun infer(bitmap: Bitmap): InferenceResult = InferenceResult(classProbs = classify(bitmap))
+
     override fun classify(bitmap: Bitmap): List<Pair<String, Float>> {
         try {
             val (w, h, ch) = Triple(

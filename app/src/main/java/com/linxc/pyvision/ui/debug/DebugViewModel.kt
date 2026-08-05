@@ -55,6 +55,13 @@ data class DebugUiState(
     val status: String = "就绪",
 )
 
+/** 处理后的预览帧（供 Canvas 渲染） */
+data class PreviewFrame(
+    val bitmap: Bitmap,
+    val detections: List<Detection> = emptyList(),
+    val classProbs: List<Pair<String, Float>> = emptyList(),
+)
+
 /** 摄像头调试 ViewModel（对应桌面版 CameraDebuggerGUI 的状态与逻辑） */
 class DebugViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -69,25 +76,47 @@ class DebugViewModel(app: Application) : AndroidViewModel(app) {
         val RESOLUTION_PRESETS = listOf(
             RESOLUTION_AUTO, "1920x1080", "1280x720", "1024x768", "800x600", "640x480",
         )
+
+        /** 处理分辨率上限（降采样，显著降低 Canny/模型开销） */
+        private const val PROCESS_MAX_DIM = 960
+        /** Canny 每 N 帧计算一次，中间帧复用缓存 */
+        private const val EDGE_EVERY = 2
     }
 
     private val settingsRepo = SettingsRepository(app)
     private val _state = MutableStateFlow(DebugUiState())
     val state: StateFlow<DebugUiState> = _state.asStateFlow()
 
+    private val _preview = MutableStateFlow<PreviewFrame?>(null)
+    /** 渲染帧流：仅当新帧处理完成时推送（替代 33ms 轮询） */
+    val preview: StateFlow<PreviewFrame?> = _preview.asStateFlow()
+
     private var cameraController: CameraController? = null
     private var modelLoader: ModelLoader? = null
-    private val lastBitmap = AtomicBoolean(false)
+
+    /** 最新原始帧槽（相机线程只写这里，处理循环消费） */
+    @Volatile
+    private var latestRaw: Bitmap? = null
+    private val processLock = Any()
     private var inferenceCounter = 0
     private val inferEvery = 3 // 对应桌面版 infer_every
-    private var frameJob: Job? = null
+    private var edgeCounter = 0
+    private var cachedEdge: Bitmap? = null
+    private var processingJob: Job? = null
+    private var frameTickerJob: Job? = null
     private var lastFrameTime = 0L
     private var fpsAccum = 0
-    private var currentProcessed: Bitmap? = null
+    private var processedCount = 0L
 
     fun init(camera: CameraController) {
         cameraController = camera
-        camera.onFrame = { frame -> onFrameArrived(frame) }
+        // 相机线程只存最新帧并立即返回，处理交给后台协程，避免阻塞 ImageAnalysis
+        camera.onFrame = { frame ->
+            synchronized(processLock) {
+                latestRaw?.recycle()
+                latestRaw = frame
+            }
+        }
         viewModelScope.launch {
             val s = settingsRepo.settings.first()
             _state.value = _state.value.copy(
@@ -105,7 +134,27 @@ class DebugViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         camera.start()
-        frameJob = viewModelScope.launch { frameTicker() }
+        processingJob = viewModelScope.launch(Dispatchers.Default) { processLoop() }
+        frameTickerJob = viewModelScope.launch { frameTicker() }
+    }
+
+    /** 后台处理循环：始终处理最新帧，处理慢时自动丢帧（相机线程不阻塞）。
+     *  注意：处理后的 Bitmap 由 preview 持有供渲染，不能显式 recycle（共享引用会致崩溃），交给 GC。 */
+    private suspend fun processLoop() {
+        while (true) {
+            val raw = synchronized(processLock) {
+                val f = latestRaw
+                latestRaw = null
+                f
+            } ?: run { kotlinx.coroutines.delay(1); continue }
+
+            try {
+                val frame = processFrame(raw)
+                if (frame != null) _preview.value = frame
+            } catch (e: Exception) {
+                // 单帧失败不中断循环
+            }
+        }
     }
 
     /** 帧限频：约 30 FPS 刷新，避免对相同缓存帧的冗余重绘（对应桌面版 after(33)） */
@@ -123,63 +172,74 @@ class DebugViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun onFrameArrived(frame: Bitmap) {
-        if (lastBitmap.compareAndSet(false, true)) {
-            try {
-                processFrame(frame)
-            } finally {
-                lastBitmap.set(false)
-            }
-        }
-    }
-
-    private fun processFrame(frame: Bitmap) {
+    private fun processFrame(raw: Bitmap): PreviewFrame? {
         val s = _state.value
-        var display = frame
-        if (s.mirror) display = FramePipeline.flipHorizontal(frame)
+        // 降采样：处理/推理都用小图
+        val small = FramePipeline.scaleDown(raw, PROCESS_MAX_DIM)
+        var display = small
+        if (s.mirror) display = FramePipeline.flipHorizontal(small)
+
         val mode = when (s.processor) {
             PROCESSOR_GRAYSCALE -> FramePipeline.Mode.GRAYSCALE
             PROCESSOR_EDGE -> FramePipeline.Mode.EDGE
             else -> FramePipeline.Mode.PASSTHROUGH
         }
 
-        val processed = if (s.processor == PROCESSOR_CNN) {
-            // CNN 模式：直通显示 + 推理 overlay
-            display
-        } else {
-            try {
-                FramePipeline.applyOffset(
-                    FramePipeline.processSync(display, mode),
-                    s.offsetX, s.offsetY,
-                )
-            } catch (e: Exception) {
-                display
-            }
-        }
-        currentProcessed = processed
+        var detections = emptyList<Detection>()
+        var classProbs = emptyList<Pair<String, Float>>()
 
-        // CNN 推理（每 N 帧一次，复用缓存结果）
         if (s.processor == PROCESSOR_CNN) {
+            // CNN 模式：直通显示 + 推理 overlay（每 N 帧推理一次，复用缓存结果）
             inferenceCounter++
             val engine = modelLoader?.current
-            val doInfer = engine != null && inferenceCounter % inferEvery == 0
-            if (engine != null && doInfer) {
+            if (engine != null && engine.isLoaded && inferenceCounter % inferEvery == 0) {
                 val clean = if (s.mirror) FramePipeline.flipHorizontal(display) else display
-                val detections = engine.detect(clean)
-                val probs = engine.classify(clean)
+                val result = engine.infer(clean)
+                detections = result.detections
+                classProbs = result.classProbs
                 inferenceCounter = 0
-                _state.value = _state.value.copy(
-                    detections = detections,
-                    classProbs = probs,
-                    frameSize = "${display.width}x${display.height}",
-                )
+            } else if (engine != null) {
+                // 非推理帧复用上次结果
+                detections = s.detections
+                classProbs = s.classProbs
             }
-        } else {
-            _state.value = _state.value.copy(frameSize = "${display.width}x${display.height}")
+            if (s.offsetX != 0 || s.offsetY != 0) {
+                display = FramePipeline.applyOffset(display, s.offsetX, s.offsetY)
+            }
+            val w = display.width
+            val h = display.height
+            _state.value = _state.value.copy(
+                detections = detections,
+                classProbs = classProbs,
+                frameSize = "${w}x${h}",
+            )
+            return PreviewFrame(display, detections, classProbs)
         }
+
+        // 非 CNN：处理管线 + 偏移
+        val processed = when (mode) {
+            FramePipeline.Mode.PASSTHROUGH -> display
+            FramePipeline.Mode.GRAYSCALE -> FramePipeline.processSync(display, mode)
+            FramePipeline.Mode.EDGE -> {
+                // Canny 限频：每 N 帧计算一次，中间帧复用缓存
+                edgeCounter++
+                if (edgeCounter % EDGE_EVERY == 0 || cachedEdge == null) {
+                    cachedEdge?.recycle()
+                    cachedEdge = FramePipeline.processSync(display, mode)
+                }
+                cachedEdge ?: display
+            }
+        }
+        val out = if (s.offsetX != 0 || s.offsetY != 0) {
+            FramePipeline.applyOffset(processed, s.offsetX, s.offsetY)
+        } else {
+            processed
+        }
+        _state.value = _state.value.copy(frameSize = "${out.width}x${out.height}")
+        return PreviewFrame(out)
     }
 
-    fun getProcessedFrame(): Bitmap? = currentProcessed
+    fun getProcessedFrame(): Bitmap? = _preview.value?.bitmap
 
     fun availableCameras(): List<Pair<String, Int>> =
         cameraController?.availableCameras() ?: emptyList()
@@ -257,7 +317,7 @@ class DebugViewModel(app: Application) : AndroidViewModel(app) {
     // ───────────── 快照 ─────────────
 
     fun snapshot() {
-        val bmp = currentProcessed ?: run {
+        val bmp = _preview.value?.bitmap ?: run {
             _state.value = _state.value.copy(status = "没有可保存的帧")
             return
         }

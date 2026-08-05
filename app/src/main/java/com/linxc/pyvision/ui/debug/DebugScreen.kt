@@ -179,20 +179,9 @@ fun DebugScreen(
 
 @Composable
 private fun VideoCanvas(vm: DebugViewModel, state: DebugUiState, modifier: Modifier = Modifier) {
-    var displayBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var frameSize by remember { mutableStateOf(0 to 0) }
-
-    // 轮询获取最新处理帧
-    LaunchedEffect(Unit) {
-        while (true) {
-            val bmp = vm.getProcessedFrame()
-            if (bmp != null) {
-                displayBitmap = bmp
-                frameSize = bmp.width to bmp.height
-            }
-            kotlinx.coroutines.delay(33)
-        }
-    }
+    // StateFlow 推送：仅当新帧处理完成时触发重组重绘（替代 33ms 轮询）
+    val preview by vm.preview.collectAsState()
+    val bmp = preview?.bitmap
 
     Box(
         modifier = modifier
@@ -201,7 +190,6 @@ private fun VideoCanvas(vm: DebugViewModel, state: DebugUiState, modifier: Modif
         contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val bmp = displayBitmap
             if (bmp != null) {
                 val scale = minOf(size.width / bmp.width, size.height / bmp.height)
                 val dw = bmp.width * scale
@@ -215,7 +203,7 @@ private fun VideoCanvas(vm: DebugViewModel, state: DebugUiState, modifier: Modif
                 )
 
                 // 检测框（坐标映射到显示区域）
-                state.detections.forEach { det ->
+                preview?.detections.orEmpty().forEach { det ->
                     val sx = dw / bmp.width
                     val sy = dh / bmp.height
                     val x = left + det.x * sx
@@ -236,12 +224,13 @@ private fun VideoCanvas(vm: DebugViewModel, state: DebugUiState, modifier: Modif
                 }
 
                 // 分类概率（左上角）
-                if (state.classProbs.isNotEmpty()) {
+                val probs = preview?.classProbs.orEmpty()
+                if (probs.isNotEmpty()) {
                     val paint = android.graphics.Paint().apply {
                         color = Color.GREEN; textSize = 20f; isAntiAlias = true
                     }
                     drawContext.canvas.nativeCanvas.drawText("Class:", 10f, 40f, paint)
-                    state.classProbs.forEachIndexed { i, (label, conf) ->
+                    probs.forEachIndexed { i, (label, conf) ->
                         drawContext.canvas.nativeCanvas.drawText(
                             "$label: $conf", 10f, 40f + 28f * (i + 1), paint,
                         )

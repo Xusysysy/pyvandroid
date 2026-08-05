@@ -173,15 +173,8 @@ fun TrainerScreen(
 
 @Composable
 private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
-    var displayBitmap by remember { mutableStateOf<Bitmap?>(null) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            val bmp = vm.getCurrentFrame()
-            if (bmp != null) displayBitmap = bmp
-            kotlinx.coroutines.delay(33)
-        }
-    }
+    // StateFlow 推送：仅新帧变化触发重绘
+    val displayBitmap by vm.preview.collectAsState()
     Row(modifier = Modifier.fillMaxSize()) {
         // 左：预览
         Box(

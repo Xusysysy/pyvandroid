@@ -38,6 +38,17 @@ object FramePipeline {
         return Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
     }
 
+    /** 按最长边降采样（处理/推理用小图，显著降低 Canny 与模型开销） */
+    fun scaleDown(bmp: Bitmap, maxDim: Int = 960): Bitmap {
+        val w = bmp.width
+        val h = bmp.height
+        if (kotlin.math.max(w, h) <= maxDim) return bmp
+        val scale = maxDim.toFloat() / kotlin.math.max(w, h)
+        val nw = (w * scale).toInt().coerceAtLeast(1)
+        val nh = (h * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(bmp, nw, nh, true)
+    }
+
     fun applyOffset(bmp: Bitmap, offsetX: Int, offsetY: Int): Bitmap {
         if (offsetX == 0 && offsetY == 0) return bmp
         val out = Bitmap.createBitmap(bmp.width, bmp.height, Bitmap.Config.ARGB_8888)

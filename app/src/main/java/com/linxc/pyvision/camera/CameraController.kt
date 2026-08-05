@@ -50,8 +50,8 @@ class CameraController(
     /** 每帧回调（后台线程）。返回旋转纠正后的帧 Bitmap */
     var onFrame: ((Bitmap) -> Unit)? = null
 
-    /** 目标分辨率（null = 相机默认） */
-    var targetResolution: Size? = null
+    /** 目标分辨率（null = 相机默认；默认限制 1280x720 以控制帧处理开销） */
+    var targetResolution: Size? = Size(1280, 720)
 
     /** 录制状态回调 */
     var onRecordingEvent: ((Boolean, String?) -> Unit)? = null
