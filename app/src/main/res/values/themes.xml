@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.Pyvision" parent="android:Theme.Material.NoActionBar" />
+</resources>
