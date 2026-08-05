@@ -20,6 +20,7 @@ class SettingsRepository(private val context: Context) {
         val RESOLUTION = stringPreferencesKey("resolution")
         val PROCESSOR = stringPreferencesKey("processor")
         val MODEL_PATH = stringPreferencesKey("model_path")
+        val MODEL_SAVE_DIR = stringPreferencesKey("model_save_dir")
         val SHOW_FPS = booleanPreferencesKey("show_fps")
         val SHOW_CROSSHAIR = booleanPreferencesKey("show_crosshair")
         val MIRROR = booleanPreferencesKey("mirror")
@@ -39,6 +40,7 @@ class SettingsRepository(private val context: Context) {
         val resolution: String = "1920x1080",
         val processor: String = "直通 (原始)",
         val modelPath: String = "",
+        val modelSaveDir: String = "",
         val showFps: Boolean = true,
         val showCrosshair: Boolean = false,
         val mirror: Boolean = false,
@@ -59,6 +61,7 @@ class SettingsRepository(private val context: Context) {
             resolution = prefs[Keys.RESOLUTION] ?: "1920x1080",
             processor = prefs[Keys.PROCESSOR] ?: "直通 (原始)",
             modelPath = prefs[Keys.MODEL_PATH] ?: "",
+            modelSaveDir = prefs[Keys.MODEL_SAVE_DIR] ?: "",
             showFps = prefs[Keys.SHOW_FPS] ?: true,
             showCrosshair = prefs[Keys.SHOW_CROSSHAIR] ?: false,
             mirror = prefs[Keys.MIRROR] ?: false,
@@ -79,6 +82,7 @@ class SettingsRepository(private val context: Context) {
         resolution: String? = null,
         processor: String? = null,
         modelPath: String? = null,
+        modelSaveDir: String? = null,
         showFps: Boolean? = null,
         showCrosshair: Boolean? = null,
         mirror: Boolean? = null,
@@ -97,6 +101,7 @@ class SettingsRepository(private val context: Context) {
             resolution?.let { prefs[Keys.RESOLUTION] = it }
             processor?.let { prefs[Keys.PROCESSOR] = it }
             modelPath?.let { prefs[Keys.MODEL_PATH] = it }
+            modelSaveDir?.let { prefs[Keys.MODEL_SAVE_DIR] = it }
             showFps?.let { prefs[Keys.SHOW_FPS] = it }
             showCrosshair?.let { prefs[Keys.SHOW_CROSSHAIR] = it }
             mirror?.let { prefs[Keys.MIRROR] = it }

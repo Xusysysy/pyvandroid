@@ -38,6 +38,8 @@ data class TrainerUiState(
     val offsetY: Int = 0,
     val trainedModelPath: String? = null,
     val progress: Float = 0f,
+    /** 模型保存目录（SAF tree uri），空 = 默认应用目录 */
+    val modelSaveDir: String = "",
 )
 
 /** 训练工作台 ViewModel（对应桌面版 TrainerGUI） */
@@ -76,6 +78,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                 epochs = s.epochs,
                 imgsz = s.imgsz,
                 batch = s.batch,
+                modelSaveDir = s.modelSaveDir,
             )
             DatasetRepository.ensureDirs(getApplication())
             refreshStats()
@@ -239,11 +242,18 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 val modelFile = File(getApplication<Application>().filesDir, "smart_glasses_cls.mlp")
                 LightTrainer.saveModel(mlp, modelFile)
+                // 用户指定了保存目录（SAF tree uri）时复制一份过去
+                val saveDir = _state.value.modelSaveDir
+                val savedPath: String = if (saveDir.isNotEmpty()) {
+                    copyModelToTree(saveDir, modelFile) ?: modelFile.absolutePath
+                } else {
+                    modelFile.absolutePath
+                }
                 _state.value = _state.value.copy(
                     training = false,
                     status = "训练完成，模型已保存",
-                    trainedModelPath = modelFile.absolutePath,
-                    log = _state.value.log + "\n[TRAINER] 模型已保存: ${modelFile.name}\n",
+                    trainedModelPath = savedPath,
+                    log = _state.value.log + "\n[TRAINER] 模型已保存: $savedPath\n",
                 )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
@@ -267,6 +277,23 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setStatus(msg: String) {
         _state.value = _state.value.copy(status = msg)
+    }
+
+    /** 把模型文件写入 SAF tree 目录，返回写入后的展示路径 */
+    private fun copyModelToTree(treeUri: String, src: File): String? = runCatching {
+        val app = getApplication<Application>()
+        val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(app, android.net.Uri.parse(treeUri)) ?: return null
+        val target = tree.findFile(src.name) ?: tree.createFile("application/octet-stream", src.name) ?: return null
+        app.contentResolver.openOutputStream(target.uri)?.use { out ->
+            src.inputStream().use { it.copyTo(out) }
+        }
+        target.uri.toString()
+    }.getOrNull()
+
+    /** 设置模型保存目录（SAF tree uri），空字符串 = 默认应用目录 */
+    fun setModelSaveDir(uri: String) {
+        _state.value = _state.value.copy(modelSaveDir = uri)
+        viewModelScope.launch { settingsRepo.update(modelSaveDir = uri) }
     }
 
     /** 导出数据集 zip 到 Download 目录，供 PC 端 pyvision trainer 训练 */

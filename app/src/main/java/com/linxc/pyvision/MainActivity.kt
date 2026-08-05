@@ -36,9 +36,16 @@ class MainActivity : ComponentActivity() {
 
     private fun requiredPermissions(): List<String> {
         val list = mutableListOf(Manifest.permission.CAMERA)
-        // 未在 Manifest 声明的权限会被系统静默拒绝，绝不能加入请求列表
-        if (Build.VERSION.SDK_INT <= 28) {
-            list += Manifest.permission.WRITE_EXTERNAL_STORAGE
+        // 文件读写（模型保存/选择等）。注意：必须与 Manifest 中声明的权限一致，
+        // 未声明的权限会被系统静默拒绝。
+        if (Build.VERSION.SDK_INT >= 33) {
+            list += Manifest.permission.READ_MEDIA_IMAGES
+            list += Manifest.permission.READ_MEDIA_VIDEO
+        } else {
+            list += Manifest.permission.READ_EXTERNAL_STORAGE
+            if (Build.VERSION.SDK_INT <= 28) {
+                list += Manifest.permission.WRITE_EXTERNAL_STORAGE
+            }
         }
         return list
     }

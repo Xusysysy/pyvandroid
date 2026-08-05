@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.datastore.preferences)
     implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.documentfile)
 
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)

@@ -102,7 +102,7 @@ fun TrainerScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "需要摄像头权限",
+                    "需要摄像头与文件访问权限",
                     color = TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
@@ -436,6 +436,24 @@ private fun PrepareTab(vm: TrainerViewModel, state: TrainerUiState) {
 private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
     var epochsText by remember(state.epochs) { mutableStateOf(state.epochs.toString()) }
     var batchText by remember(state.batch) { mutableStateOf(state.batch.toString()) }
+    val context = LocalContext.current
+
+    // 系统文件管理器选择模型保存目录（SAF tree）
+    val dirPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            vm.setModelSaveDir(uri.toString())
+            vm.setStatus("模型保存目录已设置")
+        }
+    }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // 左：参数
@@ -481,6 +499,32 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
                 color = TextPrimary,
             )
 
+            Spacer(Modifier.height(16.dp))
+            // 模型保存路径设置
+            Text("模型保存路径", fontWeight = FontWeight.Bold, color = AccentBlue)
+            Text(
+                if (state.modelSaveDir.isNotEmpty()) state.modelSaveDir
+                else "默认 (应用内部目录: filesDir/smart_glasses_cls.mlp)",
+                color = if (state.modelSaveDir.isNotEmpty()) Primary else TextSecondary,
+                fontSize = 12.sp,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp, bottom = 6.dp),
+            )
+            OutlinedButton(
+                onClick = { dirPicker.launch(null) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (state.modelSaveDir.isNotEmpty()) "更改保存目录" else "选择保存目录 (系统文件管理器)")
+            }
+            if (state.modelSaveDir.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = { vm.setModelSaveDir("") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                ) { Text("恢复默认目录") }
+            }
             Spacer(Modifier.height(16.dp))
             if (state.training) {
                 LinearProgressIndicator(
