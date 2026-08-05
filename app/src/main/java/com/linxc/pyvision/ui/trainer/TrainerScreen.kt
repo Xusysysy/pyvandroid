@@ -102,7 +102,7 @@ fun TrainerScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "需要摄像头与文件访问权限",
+                    "需要摄像头权限",
                     color = TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,

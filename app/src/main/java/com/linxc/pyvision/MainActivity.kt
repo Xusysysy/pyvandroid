@@ -26,7 +26,8 @@ class MainActivity : ComponentActivity() {
 
     private val granted = mutableStateOf(false)
 
-    /** 首次进入同时申请：摄像头 + 文件访问权限（录像为无声，无需麦克风） */
+    /** 首次进入申请权限。文件访问实际不需要：快照走 MediaStore、数据集走内部存储、模型用 SAF 选择器。
+     *  仅 API 28- 保存相册到公共目录需要 WRITE_EXTERNAL_STORAGE（Manifest 已声明 maxSdkVersion=28）。 */
     private val permissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -35,11 +36,9 @@ class MainActivity : ComponentActivity() {
 
     private fun requiredPermissions(): List<String> {
         val list = mutableListOf(Manifest.permission.CAMERA)
-        if (Build.VERSION.SDK_INT >= 33) {
-            list += Manifest.permission.READ_MEDIA_IMAGES
-        } else {
+        // 未在 Manifest 声明的权限会被系统静默拒绝，绝不能加入请求列表
+        if (Build.VERSION.SDK_INT <= 28) {
             list += Manifest.permission.WRITE_EXTERNAL_STORAGE
-            list += Manifest.permission.READ_EXTERNAL_STORAGE
         }
         return list
     }
