@@ -34,7 +34,7 @@ pyvision 的 Android 移植版 —— 摄像头调试 + 视觉识别训练工作
 ## 构建
 
 ```bash
-# 需要 JDK 17+（本机: D:\software\AndroidStudio\jbr）
+# 需要 JDK 17+
 set JAVA_HOME=D:\software\AndroidStudio\jbr
 gradlew.bat :app:assembleDebug
 # 输出: app\build\outputs\apk\debug\app-debug.apk
