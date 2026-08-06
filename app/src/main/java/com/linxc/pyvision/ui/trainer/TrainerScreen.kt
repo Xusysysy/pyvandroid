@@ -596,6 +596,7 @@ private fun PrepareTab(vm: TrainerViewModel, state: TrainerUiState) {
 private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
     var epochsText by remember(state.epochs) { mutableStateOf(state.epochs.toString()) }
     var batchText by remember(state.batch) { mutableStateOf(state.batch.toString()) }
+    var modelNameText by remember(state.modelName) { mutableStateOf(state.modelName) }
     val context = LocalContext.current
 
     // 系统文件管理器选择模型保存目录（SAF tree）
@@ -670,11 +671,37 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
             )
 
             Spacer(Modifier.height(16.dp))
+            // 输出模型命名
+            Text("输出模型名称 (不含扩展名)", fontWeight = FontWeight.Bold, color = AccentBlue)
+            Text(
+                if (state.modelName.isNotEmpty())
+                    "将保存为: ${state.modelName}.mlp"
+                else "默认: smart_glasses_cls_${state.datasetName}.mlp",
+                color = if (state.modelName.isNotEmpty()) Primary else TextSecondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp, bottom = 2.dp),
+            )
+            TextField(
+                value = modelNameText,
+                onValueChange = {
+                    modelNameText = it
+                    vm.setModelName(it)
+                },
+                singleLine = true,
+                placeholder = { Text("留空使用默认名称") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+            )
+
+            Spacer(Modifier.height(12.dp))
             // 模型保存路径设置
             Text("模型保存路径", fontWeight = FontWeight.Bold, color = AccentBlue)
             Text(
                 if (state.modelSaveDir.isNotEmpty()) state.modelSaveDir
-                else "默认 (应用内部目录: filesDir/smart_glasses_cls.mlp)",
+                else "默认 (应用内部目录: filesDir/${state.modelName.ifEmpty { "smart_glasses_cls_${state.datasetName}" }}.mlp)",
                 color = if (state.modelSaveDir.isNotEmpty()) Primary else TextSecondary,
                 fontSize = 12.sp,
                 maxLines = 2,

@@ -41,6 +41,8 @@ data class TrainerUiState(
     val progress: Float = 0f,
     /** 模型保存目录（SAF tree uri），空 = 默认应用目录 */
     val modelSaveDir: String = "",
+    /** 输出模型文件名（不含扩展名），空 = 默认按数据集命名 */
+    val modelName: String = "",
     /** 全部数据集名称 */
     val datasets: List<String> = listOf(DatasetRepository.DEFAULT_DATASET),
     /** 当前激活的数据集名称 */
@@ -89,6 +91,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                 imgsz = s.imgsz,
                 batch = s.batch,
                 modelSaveDir = s.modelSaveDir,
+                modelName = s.modelName,
                 datasets = names,
                 datasetName = datasetName,
                 classes = classes,
@@ -364,7 +367,8 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 val modelFile = File(
                     getApplication<Application>().filesDir,
-                    "smart_glasses_cls_${_state.value.datasetName}.mlp",
+                    _state.value.modelName
+                        .ifEmpty { "smart_glasses_cls_${_state.value.datasetName}" } + ".mlp",
                 )
                 LightTrainer.saveModel(mlp, modelFile)
                 // 用户指定了保存目录（SAF tree uri）时复制一份过去
@@ -419,6 +423,22 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
     fun setModelSaveDir(uri: String) {
         _state.value = _state.value.copy(modelSaveDir = uri)
         viewModelScope.launch { settingsRepo.update(modelSaveDir = uri) }
+    }
+
+    /** 设置输出模型名称（不含扩展名），空字符串 = 默认按数据集命名 */
+    fun setModelName(raw: String) {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) {
+            _state.value = _state.value.copy(modelName = "")
+            viewModelScope.launch { settingsRepo.update(modelName = "") }
+            return
+        }
+        val name = DatasetRepository.sanitizeName(trimmed) ?: run {
+            _state.value = _state.value.copy(status = "模型名称含非法字符或过长（≤32 字符）")
+            return
+        }
+        _state.value = _state.value.copy(modelName = name)
+        viewModelScope.launch { settingsRepo.update(modelName = name) }
     }
 
     /** 导出当前数据集 zip 到用户通过系统文件管理器选择的 uri，供 PC 端 pyvision trainer 训练 */
