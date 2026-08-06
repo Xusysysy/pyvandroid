@@ -33,6 +33,7 @@ class SettingsRepository(private val context: Context) {
         val EPOCHS = intPreferencesKey("epochs")
         val IMGSZ = intPreferencesKey("imgsz")
         val BATCH = intPreferencesKey("batch")
+        val DATASET_NAME = stringPreferencesKey("dataset_name")
     }
 
     data class Settings(
@@ -53,6 +54,7 @@ class SettingsRepository(private val context: Context) {
         val epochs: Int = 30,
         val imgsz: Int = 28,
         val batch: Int = 16,
+        val datasetName: String = "default",
     )
 
     val settings: Flow<Settings> = context.settingsStore.data.map { prefs ->
@@ -74,6 +76,7 @@ class SettingsRepository(private val context: Context) {
             epochs = prefs[Keys.EPOCHS] ?: 30,
             imgsz = prefs[Keys.IMGSZ] ?: 28,
             batch = prefs[Keys.BATCH] ?: 16,
+            datasetName = prefs[Keys.DATASET_NAME] ?: "default",
         )
     }
 
@@ -95,6 +98,7 @@ class SettingsRepository(private val context: Context) {
         epochs: Int? = null,
         imgsz: Int? = null,
         batch: Int? = null,
+        datasetName: String? = null,
     ) {
         context.settingsStore.edit { prefs ->
             cameraId?.let { prefs[Keys.CAMERA_ID] = it }
@@ -114,6 +118,7 @@ class SettingsRepository(private val context: Context) {
             epochs?.let { prefs[Keys.EPOCHS] = it }
             imgsz?.let { prefs[Keys.IMGSZ] = it }
             batch?.let { prefs[Keys.BATCH] = it }
+            datasetName?.let { prefs[Keys.DATASET_NAME] = it }
         }
     }
 }

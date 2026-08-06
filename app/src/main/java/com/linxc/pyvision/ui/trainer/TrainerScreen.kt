@@ -19,13 +19,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -35,6 +39,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -146,6 +151,96 @@ fun TrainerScreen(
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.padding(end = 8.dp),
+            )
+        }
+
+        // 数据集管理：选择/新建/删除（每个数据集独立命名，可训练不同模型）
+        var menuOpen by remember { mutableStateOf(false) }
+        var showCreate by remember { mutableStateOf(false) }
+        var showDelete by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("数据集", fontWeight = FontWeight.Bold, color = AccentBlue)
+            Spacer(Modifier.width(8.dp))
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { menuOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        state.datasetName,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Icon(Icons.Default.ArrowDropDown, null)
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    state.datasets.forEach { name ->
+                        DropdownMenuItem(
+                            text = { Text(name, color = if (name == state.datasetName) Primary else TextPrimary) },
+                            onClick = {
+                                menuOpen = false
+                                vm.selectDataset(name)
+                            },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = { showCreate = true }) { Text("新建") }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(
+                onClick = { showDelete = true },
+                enabled = state.datasets.size > 1,
+            ) { Text("删除", color = if (state.datasets.size > 1) AccentRed else TextSecondary) }
+        }
+
+        if (showCreate) {
+            var name by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { showCreate = false },
+                title = { Text("新建数据集") },
+                text = {
+                    TextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        label = { Text("数据集名称") },
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        vm.createDataset(name)
+                        showCreate = false
+                    }) { Text("创建") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCreate = false }) { Text("取消") }
+                },
+            )
+        }
+        if (showDelete) {
+            AlertDialog(
+                onDismissRequest = { showDelete = false },
+                title = { Text("删除数据集") },
+                text = { Text("确定删除数据集「${state.datasetName}」？该操作不可恢复。") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            vm.deleteDataset(state.datasetName)
+                            showDelete = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                    ) { Text("删除") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDelete = false }) { Text("取消") }
+                },
             )
         }
 
@@ -368,7 +463,7 @@ private fun PrepareTab(vm: TrainerViewModel, state: TrainerUiState) {
     ) {
         Text("数据集准备 (自动划分训练/验证集)", fontWeight = FontWeight.Bold, color = AccentBlue)
         Text(
-            "数据目录: ${DatasetRepository.root(LocalContext.current).absolutePath}",
+            "数据目录: ${DatasetRepository.datasetDir(LocalContext.current, state.datasetName).absolutePath}",
             color = TextSecondary,
             fontSize = 12.sp,
             maxLines = 1,
@@ -452,6 +547,16 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
             }
             vm.setModelSaveDir(uri.toString())
             vm.setStatus("模型保存目录已设置")
+        }
+    }
+
+    // 系统文件管理器选择数据集 zip 导出位置（SAF create）
+    val zipExporter = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            vm.setStatus("正在导出数据集...")
+            vm.exportDatasetZip(uri)
         }
     }
 
@@ -567,8 +672,7 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {
-                    val f = vm.exportDatasetZip()
-                    vm.setStatus(if (f != null) "数据集已导出: ${f.name}" else "导出失败")
+                    zipExporter.launch("pyvision_dataset_${state.datasetName}_${System.currentTimeMillis()}.zip")
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {

@@ -64,16 +64,17 @@ class LightTrainer {
     }
 
     /**
-     * 训练。dataRoot 应为 dataset 根目录（含 train/val/<class>/）。
+     * 训练指定数据集。datasetName 对应 datasets/<name>/ 目录（含 train/val/<class>/）。
      * onProgress 回调每完成一个 epoch 触发。
      */
     suspend fun train(
         context: android.content.Context,
+        datasetName: String,
         epochs: Int,
         batch: Int,
         onProgress: (Progress) -> Unit,
     ): Mlp {
-        val root = DatasetRepository.root(context)
+        val root = DatasetRepository.datasetDir(context, datasetName)
         val trainData = loadDataset(File(root, "train"))
         val valData = loadDataset(File(root, "val"))
         require(trainData.first.isNotEmpty()) { "训练集为空，请先采集数据并划分数据集" }

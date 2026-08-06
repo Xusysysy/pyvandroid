@@ -40,6 +40,10 @@ data class TrainerUiState(
     val progress: Float = 0f,
     /** 模型保存目录（SAF tree uri），空 = 默认应用目录 */
     val modelSaveDir: String = "",
+    /** 全部数据集名称 */
+    val datasets: List<String> = listOf(DatasetRepository.DEFAULT_DATASET),
+    /** 当前激活的数据集名称 */
+    val datasetName: String = DatasetRepository.DEFAULT_DATASET,
 )
 
 /** 训练工作台 ViewModel（对应桌面版 TrainerGUI） */
@@ -73,14 +77,19 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             val s = settingsRepo.settings.first()
+            val active = s.datasetName.ifEmpty { DatasetRepository.DEFAULT_DATASET }
+            val names = DatasetRepository.listDatasets(getApplication())
+                .ifEmpty { listOf(DatasetRepository.DEFAULT_DATASET) }
             _state.value = _state.value.copy(
                 valRatio = s.valRatio,
                 epochs = s.epochs,
                 imgsz = s.imgsz,
                 batch = s.batch,
                 modelSaveDir = s.modelSaveDir,
+                datasets = names,
+                datasetName = if (active in names) active else names.first(),
             )
-            DatasetRepository.ensureDirs(getApplication())
+            DatasetRepository.ensureDirs(getApplication(), _state.value.datasetName)
             refreshStats()
         }
         camera.start()
@@ -133,7 +142,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             frame
         }
-        val file = DatasetRepository.saveFrame(getApplication(), cls, toSave)
+        val file = DatasetRepository.saveFrame(getApplication(), _state.value.datasetName, cls, toSave)
         if (file != null) {
             refreshStats()
             _state.value = _state.value.copy(
@@ -153,10 +162,51 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshStats() {
         val context = getApplication<Application>()
-        val raw = DatasetRepository.countByClass(context, DatasetRepository.rawDir(context))
-        val train = DatasetRepository.countByClass(context, File(DatasetRepository.root(context), "train"))
-        val valCnt = DatasetRepository.countByClass(context, File(DatasetRepository.root(context), "val"))
+        val name = _state.value.datasetName
+        val raw = DatasetRepository.countByClass(DatasetRepository.rawDir(context, name))
+        val train = DatasetRepository.countByClass(File(DatasetRepository.datasetDir(context, name), "train"))
+        val valCnt = DatasetRepository.countByClass(File(DatasetRepository.datasetDir(context, name), "val"))
         _state.value = _state.value.copy(rawCounts = raw, trainCounts = train, valCounts = valCnt)
+    }
+
+    // ───────────── 数据集管理 ─────────────
+
+    /** 切换当前数据集 */
+    fun selectDataset(name: String) {
+        if (name == _state.value.datasetName) return
+        _state.value = _state.value.copy(datasetName = name, status = "已切换数据集: $name")
+        viewModelScope.launch { settingsRepo.update(datasetName = name) }
+        refreshStats()
+    }
+
+    /** 新建数据集（命名），成功后自动切换过去 */
+    fun createDataset(rawName: String) {
+        val name = DatasetRepository.create(getApplication(), rawName)
+        if (name == null) {
+            _state.value = _state.value.copy(status = "新建失败：名称非法或已存在")
+            return
+        }
+        val names = DatasetRepository.listDatasets(getApplication())
+        _state.value = _state.value.copy(datasets = names, datasetName = name, status = "已新建数据集: $name")
+        viewModelScope.launch { settingsRepo.update(datasetName = name) }
+        refreshStats()
+    }
+
+    /** 删除数据集（至少保留一个；删当前激活的则切到第一个剩余） */
+    fun deleteDataset(name: String) {
+        if (_state.value.datasets.size <= 1) {
+            _state.value = _state.value.copy(status = "至少保留一个数据集")
+            return
+        }
+        DatasetRepository.delete(getApplication(), name)
+        val names = DatasetRepository.listDatasets(getApplication())
+        val next = if (name == _state.value.datasetName)
+            names.firstOrNull() ?: DatasetRepository.DEFAULT_DATASET
+        else
+            _state.value.datasetName
+        _state.value = _state.value.copy(datasets = names, datasetName = next, status = "已删除数据集: $name")
+        viewModelScope.launch { settingsRepo.update(datasetName = next) }
+        refreshStats()
     }
 
     // ───────────── 数据准备 ─────────────
@@ -172,7 +222,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(status = "验证集比例必须在 0-1 之间")
             return
         }
-        if (DatasetRepository.totalRaw(getApplication()) == 0) {
+        if (DatasetRepository.totalRaw(getApplication(), _state.value.datasetName) == 0) {
             _state.value = _state.value.copy(status = "原始数据为空，请先采集数据")
             return
         }
@@ -180,7 +230,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(status = "正在划分数据集...")
             try {
                 withContext(Dispatchers.IO) {
-                    DatasetRepository.prepare(getApplication(), ratio)
+                    DatasetRepository.prepare(getApplication(), _state.value.datasetName, ratio)
                 }
                 refreshStats()
                 _state.value = _state.value.copy(status = "数据集划分完成")
@@ -226,6 +276,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                 val trainer = LightTrainer()
                 val mlp = trainer.train(
                     context = getApplication(),
+                    datasetName = _state.value.datasetName,
                     epochs = epochs,
                     batch = batch,
                     onProgress = { p ->
@@ -240,7 +291,10 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     },
                 )
-                val modelFile = File(getApplication<Application>().filesDir, "smart_glasses_cls.mlp")
+                val modelFile = File(
+                    getApplication<Application>().filesDir,
+                    "smart_glasses_cls_${_state.value.datasetName}.mlp",
+                )
                 LightTrainer.saveModel(mlp, modelFile)
                 // 用户指定了保存目录（SAF tree uri）时复制一份过去
                 val saveDir = _state.value.modelSaveDir
@@ -296,15 +350,18 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { settingsRepo.update(modelSaveDir = uri) }
     }
 
-    /** 导出数据集 zip 到 Download 目录，供 PC 端 pyvision trainer 训练 */
-    fun exportDatasetZip(): File? {
-        val app = getApplication<Application>()
-        val target = File(
-            app.getExternalFilesDir(null),
-            "pyvision_dataset_${System.currentTimeMillis()}.zip",
-        )
-        val ok = DatasetRepository.exportZip(app, target)
-        return if (ok) target else null
+    /** 导出当前数据集 zip 到用户通过系统文件管理器选择的 uri，供 PC 端 pyvision trainer 训练 */
+    fun exportDatasetZip(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val name = _state.value.datasetName
+            val ok = app.contentResolver.openOutputStream(uri)?.use { out ->
+                DatasetRepository.exportZip(app, name, out)
+            } ?: false
+            _state.value = _state.value.copy(
+                status = if (ok) "数据集已导出: $name" else "导出失败：数据集为空或写入错误",
+            )
+        }
     }
 
     override fun onCleared() {
