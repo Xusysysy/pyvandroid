@@ -344,6 +344,8 @@ private fun ControlPanel(
                     onClick = { vm.switchCamera(lens, name) },
                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = if (state.cameraName == name) Primary else SurfaceHigh,
+                        contentColor = if (state.cameraName == name)
+                            com.linxc.pyvision.ui.theme.Background else TextPrimary,
                     ),
                     modifier = Modifier.weight(1f),
                 ) {

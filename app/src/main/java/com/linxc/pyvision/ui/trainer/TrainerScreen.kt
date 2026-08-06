@@ -351,6 +351,8 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
                         onClick = { vm.switchCamera(lens, name) },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (state.cameraName == name) Primary else Surface,
+                            contentColor = if (state.cameraName == name)
+                                com.linxc.pyvision.ui.theme.Background else TextPrimary,
                         ),
                         modifier = Modifier.weight(1f),
                     ) {
@@ -783,6 +785,12 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
         ) {
             Text("训练日志", fontWeight = FontWeight.Bold, color = AccentBlue)
             Spacer(Modifier.height(6.dp))
+            val logScroll = rememberScrollState()
+            // 日志更新时自动滚动到最新一行
+            LaunchedEffect(state.log) {
+                kotlinx.coroutines.delay(50)
+                logScroll.scrollTo(logScroll.maxValue)
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -794,7 +802,7 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
                     color = TextPrimary,
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                     fontSize = 12.sp,
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    modifier = Modifier.verticalScroll(logScroll),
                 )
             }
         }
