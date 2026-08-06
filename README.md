@@ -49,4 +49,6 @@ gradlew.bat :app:assembleDebug
 
 ## License
 
-MIT
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+本项目基于 [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0) 发布，版权归 linxc 所有。
