@@ -14,7 +14,7 @@ pyvandroid/
 │       │   │   └── CameraController.kt   # CameraX 封装（前后/USB 外部摄像头切换、分辨率、帧回调）
 │       │   ├── data/
 │       │   │   ├── SettingsRepository.kt # DataStore 设置持久化（对应 settings.json）
-│       │   │   └── DatasetRepository.kt  # 多数据集管理（datasets/<name>/raw/train/val + zip 导出）
+│       │   │   └── DatasetRepository.kt  # 多数据集管理（datasets/<name>/raw/train/val + classes.json 分类标签 + zip 导出）
 │       │   ├── ml/
 │       │   │   ├── ModelEngine.kt        # 推理引擎接口 + ModelLoader（按后缀分发）
 │       │   │   ├── OnnxEngine.kt         # ONNX Runtime 检测/分类引擎
@@ -28,7 +28,7 @@ pyvandroid/
 │       │       ├── theme/                # 深色主题（沿用 #1a1a2e 配色）
 │       │       ├── home/HomeScreen.kt    # 主页导航卡片
 │       │       ├── debug/                # 摄像头调试（DebugScreen + ViewModel）
-│       │       └── trainer/              # 训练工作台（数据集管理 + 三 Tab + ViewModel）
+│       │       └── trainer/              # 训练工作台（数据集管理 + 分类标签编辑 + 三 Tab + ViewModel）
 │       └── res/                          # 主题/图标/字符串资源
 ├── gradle/libs.versions.toml             # 依赖版本目录
 ├── build.gradle.kts                      # 顶层构建配置

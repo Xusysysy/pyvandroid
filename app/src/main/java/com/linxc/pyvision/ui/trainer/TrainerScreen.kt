@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
@@ -270,6 +271,8 @@ fun TrainerScreen(
 private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
     // StateFlow 推送：仅新帧变化触发重绘
     val displayBitmap by vm.preview.collectAsState()
+    var showEditClasses by remember { mutableStateOf(false) }
+    var editRows by remember { mutableStateOf(listOf<Pair<String, String>>()) }
     Row(modifier = Modifier.fillMaxSize()) {
         // 左：预览
         Box(
@@ -304,10 +307,11 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
                     val infoPaint = android.graphics.Paint().apply {
                         color = android.graphics.Color.GREEN; textSize = 20f; isAntiAlias = true
                     }
-                    val clsLabel = DatasetRepository.CLASSES[state.classIndex]
+                    val clsLabel = state.classes.getOrElse(state.classIndex) { "?" }
+                    val countsStr = state.classes.zip(state.rawCounts)
+                        .joinToString("  ") { "${it.first}:${it.second}" }
                     drawContext.canvas.nativeCanvas.drawText(
-                        "Class: $clsLabel  |  Smart:${state.rawCounts[0]} " +
-                            "Reg:${state.rawCounts[1]}  Neg:${state.rawCounts[2]}",
+                        "Class: $clsLabel  |  $countsStr",
                         left + 8, top + 24, infoPaint,
                     )
                 } else {
@@ -363,13 +367,13 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
 
             Text("选择类别", fontWeight = FontWeight.Bold, color = AccentBlue)
             Spacer(Modifier.height(8.dp))
-            val colors = listOf(Primary, AccentOrange, AccentPurple)
-            DatasetRepository.CLASS_LABELS.forEachIndexed { i, label ->
+            val colors = listOf(Primary, AccentOrange, AccentPurple, AccentRed)
+            state.classes.forEachIndexed { i, label ->
                 val selected = state.classIndex == i
                 Button(
                     onClick = { vm.selectClass(i) },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selected) colors[i] else Surface,
+                        containerColor = if (selected) colors[i % colors.size] else Surface,
                         contentColor = if (selected) com.linxc.pyvision.ui.theme.Background else TextPrimary,
                     ),
                     modifier = Modifier
@@ -377,13 +381,22 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
                         .padding(vertical = 3.dp),
                 ) {
                     Text(
-                        "${label} (${i + 1})   ${state.rawCounts[i]} 张",
+                        "${label} (${i + 1})   ${state.rawCounts.getOrElse(i) { 0 }} 张",
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                 }
             }
+
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    editRows = state.classes.map { it to it }
+                    showEditClasses = true
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("编辑分类标签（数量 / 名称）") }
 
             Spacer(Modifier.height(12.dp))
             Button(
@@ -425,7 +438,7 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
             Divider(Modifier.padding(vertical = 12.dp))
             Text("采集统计", fontWeight = FontWeight.Bold, color = AccentBlue)
             Text(
-                "智能眼镜: ${state.rawCounts[0]} 张\n普通眼镜: ${state.rawCounts[1]} 张\n空桌面:   ${state.rawCounts[2]} 张",
+                state.classes.zip(state.rawCounts).joinToString("\n") { "${it.first}: ${it.second} 张" },
                 color = TextPrimary,
                 modifier = Modifier.padding(top = 4.dp),
             )
@@ -440,12 +453,62 @@ private fun CollectTab(vm: TrainerViewModel, state: TrainerUiState) {
                 )
             }
             Text(
-                "\n提示: 智能眼镜 = 带摄像头/电池\n普通眼镜 = 仅镜框镜片\n空桌面 = 无眼镜背景",
+                "\n提示: 每个分类一个独立目录，可在\"编辑分类标签\"中增删或改名。\n改名后数据跟随迁移，删除分类会清空其采集数据。",
                 color = TextSecondary,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+    }
+
+    if (showEditClasses) {
+        AlertDialog(
+            onDismissRequest = { showEditClasses = false },
+            title = { Text("编辑分类标签") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .height(320.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    editRows.forEachIndexed { i, (_, cur) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 2.dp),
+                        ) {
+                            Text("${i + 1}.", color = TextSecondary, modifier = Modifier.width(28.dp))
+                            TextField(
+                                value = cur,
+                                onValueChange = { v ->
+                                    editRows = editRows.toMutableList().apply { this[i] = editRows[i].first to v }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = {
+                                editRows = editRows.filterIndexed { j, _ -> j != i }
+                            }) {
+                                Icon(Icons.Default.Delete, "删除该分类")
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { editRows = editRows + ("" to "") },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("+ 添加分类") }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    vm.applyClassEdits(editRows)
+                    showEditClasses = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditClasses = false }) { Text("取消") }
+            },
+        )
     }
 }
 
@@ -474,9 +537,9 @@ private fun PrepareTab(vm: TrainerViewModel, state: TrainerUiState) {
 
         Card(colors = CardDefaults.cardColors(containerColor = SurfaceHigh)) {
             Column(Modifier.padding(16.dp)) {
-                Text("原始数据统计 (dataset/raw)", fontWeight = FontWeight.Bold, color = TextPrimary)
+                Text("原始数据统计 (raw)", fontWeight = FontWeight.Bold, color = TextPrimary)
                 Text(
-                    "智能: ${state.rawCounts[0]} 张 | 普通: ${state.rawCounts[1]} 张 | 空桌面: ${state.rawCounts[2]} 张",
+                    state.classes.zip(state.rawCounts).joinToString(" | ") { "${it.first}: ${it.second} 张" },
                     color = TextPrimary,
                     modifier = Modifier.padding(top = 4.dp),
                 )
@@ -507,13 +570,15 @@ private fun PrepareTab(vm: TrainerViewModel, state: TrainerUiState) {
             Column(Modifier.padding(16.dp)) {
                 Text("划分结果", fontWeight = FontWeight.Bold, color = TextPrimary)
                 Text(
-                    "训练集: 智能 ${state.trainCounts[0]} / 普通 ${state.trainCounts[1]} / 空桌面 ${state.trainCounts[2]}\n" +
-                        "验证集: 智能 ${state.valCounts[0]} / 普通 ${state.valCounts[1]} / 空桌面 ${state.valCounts[2]}",
+                    "训练集:\n" + state.classes.zip(state.trainCounts)
+                        .joinToString("\n") { "  ${it.first}: ${it.second} 张" } + "\n" +
+                        "验证集:\n" + state.classes.zip(state.valCounts)
+                        .joinToString("\n") { "  ${it.first}: ${it.second} 张" },
                     color = TextPrimary,
                     modifier = Modifier.padding(top = 6.dp),
                 )
                 Text(
-                    "\n说明: 按类别目录直接作为训练样本，无需标注边界框。\n划分会把 dataset/raw 下的图片按比例复制到 train/val。",
+                    "\n说明: 按类别目录直接作为训练样本，无需标注边界框。\n划分会把 raw 下的图片按比例复制到 train/val。",
                     color = TextSecondary,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 8.dp),

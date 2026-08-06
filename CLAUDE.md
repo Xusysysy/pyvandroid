@@ -85,10 +85,14 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 7. Build After Every Modification
 
-**After every code modification, build the exe with PyInstaller and report the output location:**
+**After every code modification, build and report the output location:**
 
-- Run: `pyinstaller camera_debugger.spec --noconfirm` (from project root)
-- If build succeeds, report the output directory (typically `dist/camera_debugger/`) and the exe path
+- 本项目是 Android 应用，用 Gradle 构建（PyInstaller 仅适用于桌面版 pyvision）。
+- **JDK 位置（务必先设置，避免每次重找）：** `D:\software\AndroidStudio\jbr`，
+  构建前执行 `$env:JAVA_HOME="D:\software\AndroidStudio\jbr"`。
+- 编译校验：`.\gradlew.bat :app:compileDebugKotlin --console=plain -q`
+- 构建 APK：`.\gradlew.bat :app:assembleDebug --console=plain -q`
+- 构建成功输出目录：`app/build/outputs/apk/debug/app-debug.apk`
 - If build fails, report the error and stop — do not skip the build
 
 ## 8. Prefer Edit Over Write + Sync STRUCTURE.md

@@ -55,7 +55,7 @@ class MlpEngine private constructor(private val mlp: LightTrainer.Mlp) : ModelEn
             val items = probs.withIndex()
                 .sortedByDescending { it.value }
                 .take(5)
-                .map { it.index.toString() to it.value }
+                .map { iv -> (mlp.labels.getOrElse(iv.index) { iv.index.toString() }) to iv.value }
             items.forEach { (label, conf) ->
                 val prev = smoothProbs[label]
                 smoothProbs[label] = if (prev != null) prev * 0.5f + conf * 0.5f else conf

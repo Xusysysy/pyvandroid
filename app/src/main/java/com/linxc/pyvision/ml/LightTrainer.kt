@@ -12,16 +12,16 @@ import kotlin.math.max
 import kotlin.random.Random
 
 /**
- * 设备端轻量分类训练器（纯 Kotlin MLP：784→64→3，ReLU + Softmax + Adam）。
+ * 设备端轻量分类训练器（纯 Kotlin MLP：784→64→N，ReLU + Softmax + Adam）。
  * Android 端无法运行 ultralytics/PyTorch，此实现完成"采集→划分→训练→出模型"设备端闭环。
- * 输入：28x28 灰度图（对应桌面版 imgsz=28 的简化）。
+ * 输入：28x28 灰度图（对应桌面版 imgsz=28 的简化）。输出维度 = 分类标签数量。
  */
 class LightTrainer {
 
     data class Params(val input: Int = 784, val hidden: Int = 64, val output: Int = 3)
     data class Progress(val epoch: Int, val totalEpochs: Int, val loss: Float, val acc: Float, val valAcc: Float)
 
-    class Mlp(val p: Params = Params()) {
+    class Mlp(val p: Params = Params(), val labels: List<String> = emptyList()) {
         var w1 = Array(p.input) { FloatArray(p.hidden) { (Random.nextFloat() - 0.5f) * 0.3f } }
         var b1 = FloatArray(p.hidden) { (Random.nextFloat() - 0.5f) * 0.3f }
         var w2 = Array(p.hidden) { FloatArray(p.output) { (Random.nextFloat() - 0.5f) * 0.3f } }
@@ -65,21 +65,23 @@ class LightTrainer {
 
     /**
      * 训练指定数据集。datasetName 对应 datasets/<name>/ 目录（含 train/val/<class>/）。
+     * classes 为分类标签列表，决定输出维度并随模型保存。
      * onProgress 回调每完成一个 epoch 触发。
      */
     suspend fun train(
         context: android.content.Context,
         datasetName: String,
+        classes: List<String>,
         epochs: Int,
         batch: Int,
         onProgress: (Progress) -> Unit,
     ): Mlp {
         val root = DatasetRepository.datasetDir(context, datasetName)
-        val trainData = loadDataset(File(root, "train"))
-        val valData = loadDataset(File(root, "val"))
+        val trainData = loadDataset(File(root, "train"), classes)
+        val valData = loadDataset(File(root, "val"), classes)
         require(trainData.first.isNotEmpty()) { "训练集为空，请先采集数据并划分数据集" }
 
-        val m = Mlp()
+        val m = Mlp(Params(output = classes.size), classes)
         val p = m.p
         val lr = 0.001f
         val beta1 = 0.9f; val beta2 = 0.999f; val eps = 1e-8f
@@ -170,10 +172,10 @@ class LightTrainer {
         return correct.toFloat() / data.first.size
     }
 
-    private fun loadDataset(dir: File): Pair<List<FloatArray>, List<Int>> {
+    private fun loadDataset(dir: File, classes: List<String>): Pair<List<FloatArray>, List<Int>> {
         val xs = mutableListOf<FloatArray>()
         val ys = mutableListOf<Int>()
-        DatasetRepository.CLASSES.forEachIndexed { clsIdx, cls ->
+        classes.forEachIndexed { clsIdx, cls ->
             val classDir = File(dir, cls)
             DatasetRepository.listImages(classDir).forEach { img ->
                 val bmp = android.graphics.BitmapFactory.decodeFile(img.absolutePath) ?: return@forEach
@@ -186,8 +188,12 @@ class LightTrainer {
     }
 
     companion object {
+        /** 保存模型：v2 格式（版本号 + 分类标签 + 网络参数 + 权重） */
         fun saveModel(mlp: Mlp, file: File) {
             DataOutputStream(FileOutputStream(file)).use { out ->
+                out.writeInt(2)
+                out.writeInt(mlp.labels.size)
+                mlp.labels.forEach { out.writeUTF(it) }
                 val p = mlp.p
                 out.writeInt(p.input); out.writeInt(p.hidden); out.writeInt(p.output)
                 for (k in 0 until p.input) for (j in 0 until p.hidden) out.writeFloat(mlp.w1[k][j])
@@ -197,10 +203,23 @@ class LightTrainer {
             }
         }
 
+        /** 加载模型；兼容 v1 旧格式（无标签，回退为索引字符串） */
         fun loadModel(file: File): Mlp? = runCatching {
             DataInputStream(FileInputStream(file)).use { inp ->
-                val input = inp.readInt(); val hidden = inp.readInt(); val output = inp.readInt()
-                val m = Mlp(Params(input, hidden, output))
+                val first = inp.readInt()
+                val labels: List<String>
+                val input: Int
+                val hidden: Int
+                val output: Int
+                if (first == 2) {
+                    val n = inp.readInt()
+                    labels = (0 until n).map { inp.readUTF() }
+                    input = inp.readInt(); hidden = inp.readInt(); output = inp.readInt()
+                } else {
+                    labels = emptyList()
+                    input = first; hidden = inp.readInt(); output = inp.readInt()
+                }
+                val m = Mlp(Params(input, hidden, output), labels.ifEmpty { (0 until output).map { it.toString() } })
                 for (k in 0 until input) for (j in 0 until hidden) m.w1[k][j] = inp.readFloat()
                 for (j in 0 until hidden) m.b1[j] = inp.readFloat()
                 for (j in 0 until hidden) for (k in 0 until output) m.w2[j][k] = inp.readFloat()

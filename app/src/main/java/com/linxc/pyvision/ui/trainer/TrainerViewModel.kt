@@ -22,6 +22,7 @@ import java.io.File
 
 data class TrainerUiState(
     val classIndex: Int = 0,
+    val classes: List<String> = DatasetRepository.DEFAULT_CLASSES,
     val rawCounts: List<Int> = listOf(0, 0, 0),
     val trainCounts: List<Int> = listOf(0, 0, 0),
     val valCounts: List<Int> = listOf(0, 0, 0),
@@ -80,6 +81,8 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             val active = s.datasetName.ifEmpty { DatasetRepository.DEFAULT_DATASET }
             val names = DatasetRepository.listDatasets(getApplication())
                 .ifEmpty { listOf(DatasetRepository.DEFAULT_DATASET) }
+            val datasetName = if (active in names) active else names.first()
+            val classes = DatasetRepository.loadClasses(getApplication(), datasetName)
             _state.value = _state.value.copy(
                 valRatio = s.valRatio,
                 epochs = s.epochs,
@@ -87,9 +90,10 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                 batch = s.batch,
                 modelSaveDir = s.modelSaveDir,
                 datasets = names,
-                datasetName = if (active in names) active else names.first(),
+                datasetName = datasetName,
+                classes = classes,
             )
-            DatasetRepository.ensureDirs(getApplication(), _state.value.datasetName)
+            DatasetRepository.ensureDirs(getApplication(), _state.value.datasetName, _state.value.classes)
             refreshStats()
         }
         camera.start()
@@ -135,7 +139,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(status = "没有可保存的帧")
             return
         }
-        val cls = DatasetRepository.CLASSES[_state.value.classIndex]
+        val cls = _state.value.classes[_state.value.classIndex]
         val offset = _state.value
         val toSave = if (offset.offsetX != 0 || offset.offsetY != 0) {
             com.linxc.pyvision.processing.FramePipeline.applyOffset(frame, offset.offsetX, offset.offsetY)
@@ -163,9 +167,10 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshStats() {
         val context = getApplication<Application>()
         val name = _state.value.datasetName
-        val raw = DatasetRepository.countByClass(DatasetRepository.rawDir(context, name))
-        val train = DatasetRepository.countByClass(File(DatasetRepository.datasetDir(context, name), "train"))
-        val valCnt = DatasetRepository.countByClass(File(DatasetRepository.datasetDir(context, name), "val"))
+        val classes = _state.value.classes
+        val raw = DatasetRepository.countByClass(DatasetRepository.rawDir(context, name), classes)
+        val train = DatasetRepository.countByClass(File(DatasetRepository.datasetDir(context, name), "train"), classes)
+        val valCnt = DatasetRepository.countByClass(File(DatasetRepository.datasetDir(context, name), "val"), classes)
         _state.value = _state.value.copy(rawCounts = raw, trainCounts = train, valCounts = valCnt)
     }
 
@@ -174,7 +179,13 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
     /** 切换当前数据集 */
     fun selectDataset(name: String) {
         if (name == _state.value.datasetName) return
-        _state.value = _state.value.copy(datasetName = name, status = "已切换数据集: $name")
+        val classes = DatasetRepository.loadClasses(getApplication(), name)
+        _state.value = _state.value.copy(
+            datasetName = name,
+            classes = classes,
+            classIndex = 0,
+            status = "已切换数据集: $name",
+        )
         viewModelScope.launch { settingsRepo.update(datasetName = name) }
         refreshStats()
     }
@@ -187,7 +198,14 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val names = DatasetRepository.listDatasets(getApplication())
-        _state.value = _state.value.copy(datasets = names, datasetName = name, status = "已新建数据集: $name")
+        val classes = DatasetRepository.loadClasses(getApplication(), name)
+        _state.value = _state.value.copy(
+            datasets = names,
+            datasetName = name,
+            classes = classes,
+            classIndex = 0,
+            status = "已新建数据集: $name",
+        )
         viewModelScope.launch { settingsRepo.update(datasetName = name) }
         refreshStats()
     }
@@ -204,8 +222,55 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             names.firstOrNull() ?: DatasetRepository.DEFAULT_DATASET
         else
             _state.value.datasetName
-        _state.value = _state.value.copy(datasets = names, datasetName = next, status = "已删除数据集: $name")
+        val classes = DatasetRepository.loadClasses(getApplication(), next)
+        _state.value = _state.value.copy(
+            datasets = names,
+            datasetName = next,
+            classes = classes,
+            classIndex = 0,
+            status = "已删除数据集: $name",
+        )
         viewModelScope.launch { settingsRepo.update(datasetName = next) }
+        refreshStats()
+    }
+
+    // ───────────── 分类标签编辑 ─────────────
+
+    /**
+     * 应用分类标签编辑。edits 为 (原标签, 新标签) 列表：原标签标记身份，
+     * 改名时数据目录跟随；被移除的行（原标签不再出现）删除其目录。
+     */
+    fun applyClassEdits(edits: List<Pair<String, String>>) {
+        val current = _state.value.classes
+        val sanitized = edits.map { (_, cur) -> DatasetRepository.sanitizeName(cur) }
+        if (sanitized.size < 2 || sanitized.size > 10 || sanitized.any { it == null }) {
+            _state.value = _state.value.copy(status = "分类数量需在 2-10 个，名称不能为空或含非法字符")
+            return
+        }
+        val newLabels = sanitized.map { it!! }
+        if (newLabels.size != newLabels.distinct().size) {
+            _state.value = _state.value.copy(status = "分类名称不能重复")
+            return
+        }
+        val context = getApplication<Application>()
+        val name = _state.value.datasetName
+        edits.forEach { (orig, cur) ->
+            val to = DatasetRepository.sanitizeName(cur)
+            if (orig.isNotEmpty() && to != null && orig != to) {
+                DatasetRepository.renameClassDir(context, name, orig, to)
+            }
+        }
+        current.forEach { oldLabel ->
+            if (edits.none { it.first == oldLabel }) {
+                DatasetRepository.deleteClassDir(context, name, oldLabel)
+            }
+        }
+        DatasetRepository.saveClasses(context, name, newLabels)
+        _state.value = _state.value.copy(
+            classes = newLabels,
+            classIndex = _state.value.classIndex.coerceIn(0, newLabels.size - 1),
+            status = "分类标签已更新",
+        )
         refreshStats()
     }
 
@@ -222,7 +287,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(status = "验证集比例必须在 0-1 之间")
             return
         }
-        if (DatasetRepository.totalRaw(getApplication(), _state.value.datasetName) == 0) {
+        if (DatasetRepository.totalRaw(getApplication(), _state.value.datasetName, _state.value.classes) == 0) {
             _state.value = _state.value.copy(status = "原始数据为空，请先采集数据")
             return
         }
@@ -230,7 +295,12 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(status = "正在划分数据集...")
             try {
                 withContext(Dispatchers.IO) {
-                    DatasetRepository.prepare(getApplication(), _state.value.datasetName, ratio)
+                    DatasetRepository.prepare(
+                        getApplication(),
+                        _state.value.datasetName,
+                        _state.value.classes,
+                        ratio,
+                    )
                 }
                 refreshStats()
                 _state.value = _state.value.copy(status = "数据集划分完成")
@@ -277,6 +347,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                 val mlp = trainer.train(
                     context = getApplication(),
                     datasetName = _state.value.datasetName,
+                    classes = _state.value.classes,
                     epochs = epochs,
                     batch = batch,
                     onProgress = { p ->
