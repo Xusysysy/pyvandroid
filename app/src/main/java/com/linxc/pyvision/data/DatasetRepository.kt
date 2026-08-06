@@ -19,12 +19,14 @@ import java.util.zip.ZipOutputStream
 object DatasetRepository {
 
     const val DEFAULT_DATASET = "default"
-    const val CLASS_SMART = "smart_glasses"
-    const val CLASS_REGULAR = "regular_glasses"
-    const val CLASS_NEGATIVE = "negative"
 
-    /** 新数据集默认分类标签（同时也是类目录名） */
-    val DEFAULT_CLASSES = listOf("智能眼镜", "普通眼镜", "空桌面")
+    /** 老版本数据集目录名（仅用于旧数据迁移，不再用于新数据集） */
+    const val LEGACY_CLASS_SMART = "smart_glasses"
+    const val LEGACY_CLASS_REGULAR = "regular_glasses"
+    const val LEGACY_CLASS_NEGATIVE = "negative"
+
+    /** 新数据集默认分类标签（同时也是类目录名），可在训练台内自由增删改名 */
+    val DEFAULT_CLASSES = listOf("类别1", "类别2", "类别3")
 
     /** 数据集根目录：filesDir/datasets */
     fun root(context: Context): File = File(context.filesDir, "datasets")
@@ -94,7 +96,11 @@ object DatasetRepository {
             }
         }
         val raw = rawDir(context, name)
-        val legacyMap = listOf(CLASS_SMART to "智能眼镜", CLASS_REGULAR to "普通眼镜", CLASS_NEGATIVE to "空桌面")
+        val legacyMap = listOf(
+            LEGACY_CLASS_SMART to DEFAULT_CLASSES[0],
+            LEGACY_CLASS_REGULAR to DEFAULT_CLASSES[1],
+            LEGACY_CLASS_NEGATIVE to DEFAULT_CLASSES[2],
+        )
         if (legacyMap.any { (old, _) -> File(raw, old).exists() }) {
             legacyMap.forEach { (old, new) -> renameClassDir(context, name, old, new) }
         }

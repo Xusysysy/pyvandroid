@@ -143,7 +143,7 @@ fun TrainerScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.Default.ArrowBack, "返回", tint = TextPrimary)
             }
-            Text("智能眼镜训练工作台", style = MaterialTheme.typography.titleLarge, color = Primary)
+            Text("视觉识别训练工作台", style = MaterialTheme.typography.titleLarge, color = Primary)
             Spacer(Modifier.weight(1f))
             Text(
                 state.status,
@@ -676,7 +676,7 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
             Text(
                 if (state.modelName.isNotEmpty())
                     "将保存为: ${state.modelName}.mlp"
-                else "默认: smart_glasses_cls_${state.datasetName}.mlp",
+                else "默认: vision_cls_${state.datasetName}.mlp",
                 color = if (state.modelName.isNotEmpty()) Primary else TextSecondary,
                 fontSize = 12.sp,
                 maxLines = 1,
@@ -701,7 +701,7 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
             Text("模型保存路径", fontWeight = FontWeight.Bold, color = AccentBlue)
             Text(
                 if (state.modelSaveDir.isNotEmpty()) state.modelSaveDir
-                else "默认 (应用内部目录: filesDir/${state.modelName.ifEmpty { "smart_glasses_cls_${state.datasetName}" }}.mlp)",
+                else "默认 (应用内部目录: filesDir/${state.modelName.ifEmpty { "vision_cls_${state.datasetName}" }}.mlp)",
                 color = if (state.modelSaveDir.isNotEmpty()) Primary else TextSecondary,
                 fontSize = 12.sp,
                 maxLines = 2,
@@ -756,7 +756,7 @@ private fun TrainTab(vm: TrainerViewModel, state: TrainerUiState) {
             Divider(Modifier.padding(vertical = 12.dp))
             Text("PC 端训练 (高级)", fontWeight = FontWeight.Bold, color = AccentBlue)
             Text(
-                "设备端为轻量 MLP 分类器。如需使用 pyvision 桌面版\nYOLO11-cls 训练，可导出数据集 zip 到 PC 运行:\n\n  python trainer.py\n\n训练后把 smart_glasses.onnx 拷入手机，在调试工具加载。",
+                "设备端为轻量 MLP 分类器。如需使用 pyvision 桌面版\nYOLO11-cls 训练，可导出数据集 zip 到 PC 运行:\n\n  python trainer.py\n\n训练后把导出的 onnx 模型拷入手机，在调试工具加载。",
                 color = TextSecondary,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 4.dp),

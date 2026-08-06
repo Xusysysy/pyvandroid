@@ -368,7 +368,7 @@ class TrainerViewModel(app: Application) : AndroidViewModel(app) {
                 val modelFile = File(
                     getApplication<Application>().filesDir,
                     _state.value.modelName
-                        .ifEmpty { "smart_glasses_cls_${_state.value.datasetName}" } + ".mlp",
+                        .ifEmpty { "vision_cls_${_state.value.datasetName}" } + ".mlp",
                 )
                 LightTrainer.saveModel(mlp, modelFile)
                 // 用户指定了保存目录（SAF tree uri）时复制一份过去

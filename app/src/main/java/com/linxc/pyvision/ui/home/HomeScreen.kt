@@ -49,7 +49,7 @@ fun HomeScreen(onOpenDebug: () -> Unit, onOpenTrainer: () -> Unit) {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                "摄像头调试 + 智能眼镜训练工作台",
+                "摄像头调试 + 视觉识别训练工作台",
                 style = MaterialTheme.typography.bodyLarge,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 8.dp),

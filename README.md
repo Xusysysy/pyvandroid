@@ -3,7 +3,7 @@
 > GitHub: https://github.com/Xusysysy/pyvandroid.git
 > Gitee: https://gitee.com/lin-xiaochuan/pyvandroid.git
 
-pyvision 的 Android 移植版 —— 摄像头调试 + 智能眼镜训练工作台，Jetpack Compose 原生应用。
+pyvision 的 Android 移植版 —— 摄像头调试 + 视觉识别训练工作台，Jetpack Compose 原生应用。
 
 ## 功能（对应桌面版 pyvision）
 
@@ -16,9 +16,9 @@ pyvision 的 Android 移植版 —— 摄像头调试 + 智能眼镜训练工作
 - **设置持久化**：DataStore 自动保存并恢复
 
 ### 训练工作台（trainer）
-- **1. 采集数据**：摄像头预览，三类一键保存（智能眼镜/普通眼镜/空桌面）
+- **1. 采集数据**：摄像头预览，分类一键保存（分类标签可自定义增删改名）
 - **2. 准备数据**：自动按比例划分训练集/验证集（随机种子 42）
-- **3. 训练模型**：设备端轻量 MLP 分类训练（纯 Kotlin，784→64→3 + Adam），实时日志与进度；另支持导出数据集 zip 到 PC 用 pyvision 桌面版训练 YOLO11-cls
+- **3. 训练模型**：设备端轻量 MLP 分类训练（纯 Kotlin，784→64→N + Adam），实时日志与进度；另支持导出数据集 zip 到 PC 用 pyvision 桌面版训练 YOLO11-cls
 
 ## 技术栈
 
