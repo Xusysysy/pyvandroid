@@ -90,9 +90,11 @@ fun DebugScreen(
 
     val camera = remember { CameraController(context, lifecycleOwner) }
 
-    // 文件选择器：通过系统文件管理器选择模型文件（.onnx/.tflite/.mlp）
+    // 文件选择器：通过系统文件管理器选择模型文件（.onnx/.tflite/.mlp）。
+    // 用 ACTION_GET_CONTENT 而非 OPEN_DOCUMENT：澎湃OS/MIUI 会把 DocumentsUI 拦截成小弹窗，
+    // 而 GET_CONTENT 走系统全屏文件选择器，可跳转文件管理应用，横屏下更好操作。
     val modelPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             // 从真实文件名取扩展名（getType 返回 MIME 如 application/octet-stream，不能当扩展名）
@@ -168,7 +170,7 @@ fun DebugScreen(
             state = state,
             vm = vm,
             onBack = onBack,
-            onPickModel = { modelPicker.launch(arrayOf("*/*")) },
+            onPickModel = { modelPicker.launch("*/*") },
             modifier = Modifier
                 .width(320.dp)
                 .fillMaxHeight()
